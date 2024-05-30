@@ -1,0 +1,43 @@
+version: "3.3"
+
+services:
+    traefik:
+        image: "traefik:v3.0"
+        container_name: "traefik"
+        restart: always
+        command:
+            #- "--log.level=DEBUG"
+            #- "--accesslog=false"
+            - "--api.insecure=false"
+            - "--api.dashboard=false"
+            - "--api.debug=false"
+            - "--providers.docker=true"
+            - "--providers.docker.exposedbydefault=false"
+            - "--entryPoints.websecure.address=:443"
+            - "--entryPoints.websecure.forwardedHeaders.insecure"
+            - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+            - "--certificatesresolvers.myresolver.acme.email={your@email}"
+            - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+        ports:
+            - "443:443"
+            # - "8080:8080"
+        volumes:
+            - "./letsencrypt:/letsencrypt"
+            - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+    dockerproxy:
+        image: "registry:2"
+        container_name: "docker-registry-proxy"
+        restart: always
+        environment:
+            - "REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io"
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.dockerproxy.rule=Host(`{domain}`)"
+            - "traefik.http.routers.dockerproxy.entrypoints=websecure"
+            - "traefik.http.routers.dockerproxy.service=dockerproxy"
+            - "traefik.http.routers.dockerproxy.tls.certresolver=myresolver"
+            - "traefik.http.services.dockerproxy.loadbalancer.server.scheme=http"
+            - "traefik.http.services.dockerproxy.loadbalancer.server.port=5000"
+            - "traefik.http.middlewares.ipallowlist.ipallowlist.sourcerange=127.0.0.1/32"
+            - "traefik.http.routers.dockerproxy.middlewares=ipallowlist"
